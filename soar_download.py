@@ -18,7 +18,8 @@ def main():
                         help='Date of CDF CDF files to download in format YYYY-MM-DD')
     parser.add_argument('-d', '--descriptor',
                         nargs=1,
-                        help='Descriptor of CDF CDF files to download such as EAS. Use * for all EAS data.')
+                        help='Descriptor of CDF CDF files to download such as EAS. Use * for all EAS data. TDS TSWF-e '
+                             'descriptor: RPW-TDS-SURV-TSWF-E')
     parser.add_argument('-o', '--output-dir',
                         nargs=1,
                         help='Directory where resulting CDFs will be saved [{OUTPUT_DIR}].')
