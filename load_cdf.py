@@ -22,14 +22,8 @@ def load_tswf(year, month, day, opt=''):
     cdf = cdflib.CDF(os.path.join('Download', ('%04d' % year), ('%02d' % month), fname))
 
     data = {}
-
-    if opt == 'nnet':
-        for varname in ['Epoch', 'SAMPLING_RATE', 'CHANNEL_ON', 'SAMPS_PER_CH', 'WAVEFORM_DATA',
-                        'TDS_CONFIG_LABEL']:
-            data[varname] = cdf.varget(varname)
-        return data
-
-    (why, varnames) = cdf._get_varnames()
+    info = cdf.cdf_info()
+    varnames = info['zVariables']
     for varname in varnames:
         data[varname] = cdf.varget(varname)
     return data
@@ -109,5 +103,8 @@ def convert_to_SRF(data, index=0):
     ww = data['WAVEFORM_DATA'][index, :, 0:nsamp]
     # projection: E = MAT(ANT->SRF) * V; where MAT(2,2) and V is observed field
     M = np.linalg.inv(M)
-    E = np.dot(M, ww[0:2, :])  # transformation into SRF (Y-Z) in (V/m)
+    E = np.dot(M, ww[0:2, :]) * 1e3  # transformation into SRF (Y-Z) in (mV/m)
     return E
+
+download_tswf('2021-11-15')
+x=load_tswf(2021,11,15)
