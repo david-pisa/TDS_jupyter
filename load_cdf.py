@@ -11,37 +11,36 @@ from pathlib import Path
 import os
 
 
-def load_tds(filetype, year, month, day, opt=''):
-    filetype = filetype.lower()
+def load_tswf(year, month, day, opt=''):
+    filetype = 'tswf'
 
-    if filetype == 'tswf' or filetype == 'rswf':
-        data_folder = os.path.join(os.getcwd(), 'Downloads')
-        for names in os.listdir(os.path.join('Download', ('%04d' % year), ('%02d' % month))):
-            if ('solo_L2_rpw-tds-surv-%s-e_%04d%02d%02d_V' % (filetype, year, month, day)) in names:
-                fname = names
-        print('loading ' + fname)
-        cdf = cdflib.CDF(os.path.join('Download', ('%04d' % year), ('%02d' % month), fname))
+    data_folder = os.path.join(os.getcwd(), 'Downloads')
+    for names in os.listdir(os.path.join('Download', ('%04d' % year), ('%02d' % month))):
+        if ('solo_L2_rpw-tds-surv-%s-e_%04d%02d%02d_V' % (filetype, year, month, day)) in names:
+            fname = names
+    print('loading ' + fname)
+    cdf = cdflib.CDF(os.path.join('Download', ('%04d' % year), ('%02d' % month), fname))
 
-        data = {}
+    data = {}
 
-        if opt == 'nnet':
-            for varname in ['Epoch', 'SAMPLING_RATE', 'CHANNEL_ON', 'SAMPS_PER_CH', 'WAVEFORM_DATA',
-                            'TDS_CONFIG_LABEL']:
-                data[varname] = cdf.varget(varname)
-            return data
-
-        (why, varnames) = cdf._get_varnames()
-        for varname in varnames:
+    if opt == 'nnet':
+        for varname in ['Epoch', 'SAMPLING_RATE', 'CHANNEL_ON', 'SAMPS_PER_CH', 'WAVEFORM_DATA',
+                        'TDS_CONFIG_LABEL']:
             data[varname] = cdf.varget(varname)
         return data
 
+    (why, varnames) = cdf._get_varnames()
+    for varname in varnames:
+        data[varname] = cdf.varget(varname)
+    return data
 
-def download_tds(date, descriptor, output_dir):
+
+def download_tswf(date='2021-10-09', output_dir='Download'):
     # Input args
     # date          Date of CDF CDF files to download in format YYYY-MM-DD')
-    # descriptor    Descriptor of CDF CDF files to download such as EAS. Use * for all EAS data. TDS TSWF-e
-    #               descriptor: RPW-TDS-SURV-TSWF-E
     # output_dir    Directory where resulting CDFs will be saved [{OUTPUT_DIR}].
+
+    descriptor = 'RPW-TDS-SURV-TSWF-E'
 
     try:
         y = int(date[0:4])
@@ -110,6 +109,5 @@ def convert_to_SRF(data, index=0):
     ww = data['WAVEFORM_DATA'][index, :, 0:nsamp]
     # projection: E = MAT(ANT->SRF) * V; where MAT(2,2) and V is observed field
     M = np.linalg.inv(M)
-    print(ww[0, 0])
     E = np.dot(M, ww[0:2, :])  # transformation into SRF (Y-Z) in (V/m)
     return E
