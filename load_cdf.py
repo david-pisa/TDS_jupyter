@@ -7,8 +7,10 @@ import datetime
 # import wget
 import os
 import cdflib
+import cdflib.epochs as epoch
 from pathlib import Path
 import os
+import matplotlib.pyplot as plt
 
 
 def load_tswf(year, month, day, opt=''):
@@ -106,5 +108,82 @@ def convert_to_SRF(data, index=0):
     E = np.dot(M, ww[0:2, :]) * 1e3  # transformation into SRF (Y-Z) in (mV/m)
     return E
 
-download_tswf('2021-11-15')
-x=load_tswf(2021,11,15)
+def plot_waveform(cdf, rec=0):
+    ww = convert_to_SRF(cdf, rec)
+    fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True, sharey=True)
+    sr = cdf['SAMPLING_RATE'][rec]
+    nsamp = cdf['SAMPS_PER_CH'][rec]
+    t0 = epoch.CDFepoch.to_datetime(cdf['Epoch'][rec])
+    t0 = t0[0].strftime('%Y/%m/%d, %H:%M:%S.%f')
+    tt = np.arange(0, nsamp/sr, 1/sr)*1e3
+    ax1.plot(tt,ww[0, :])
+    ax1.set(ylabel='$EY_{SRF}$ (mV/m)')
+    plt.xlabel('Time since trigger (ms)')
+    ax2.plot(tt,ww[1, :])
+    ax2.set(ylabel='$EZ_{SRF}$ (mV/m)')
+    plt.xlabel('Time since trigger (ms)')
+    plt.suptitle(('TDS-TSWF waveforms in SRF: %s SWF#%d' % (t0, rec)))
+    plt.xlim(0, nsamp/sr*1e3)
+    plt.show()
+
+def plot_spectrum(cdf, rec=0):
+    nsamp = cdf['SAMPS_PER_CH'][rec]
+    ww = convert_to_SRF(cdf, rec)
+    sr = cdf['SAMPLING_RATE'][rec]
+    tt = np.arange(0, nsamp/sr, 1/sr)
+    fourier_transform = np.fft.rfft(ww)
+    abs_fourier_transform = np.abs(fourier_transform)
+    power_spectrum = np.square(abs_fourier_transform)
+    frequency = np.linspace(0, sr / 2, len(power_spectrum[0,:]))
+    xmin = find_nearest(frequency, 200)
+    xmax = find_nearest(frequency, min(sr/2, 200000))
+    plt.plot(frequency[xmin:xmax]*1e-3, power_spectrum[0, xmin:xmax])
+    plt.plot(frequency[xmin:xmax]*1e-3, power_spectrum[1, xmin:xmax])
+    plt.yscale("log")
+    plt.xlim(2, min(sr / 2, 200))
+    plt.xlabel('Frequency (kHz)')
+    plt.ylabel('Power spectral density')
+    t0 = epoch.CDFepoch.to_datetime(cdf['Epoch'][rec])
+    t0 = t0[0].strftime('%Y/%m/%d, %H:%M:%S.%f')
+    plt.title(('SolO TDS TSWF spectrum  %s SWF#%d' % (t0, rec)))
+    plt.show()
+
+def find_nearest(array, value):
+    array = np.asarray(array)
+    idx = (np.abs(array - value)).argmin()
+    return idx
+
+def plot_hodogram(cdf, rec=0, size=200, samp=-1):
+    ww = convert_to_SRF(cdf, rec)
+    nsamp = cdf['SAMPS_PER_CH'][rec]
+    if samp == -1:
+        amp = np.abs(ww[0, :]) + np.abs(ww[1, :])
+        samp = np.argmax(amp)
+        if samp<size/2:
+            samp = 251
+        elif samp>nsamp-(size/2):
+            samp = nsamp-251
+
+    if samp < size / 2:
+        samp = size + 1
+    elif samp > nsamp - (size / 2):
+        samp = nsamp - size - 1
+
+    y = ww[0, samp-size:int(samp+size/2)]
+    z = ww[1, samp-size:int(samp+size/2)]
+    plt.plot(y,z)
+    m = ww.max()*1.1
+    plt.xlim(-m,m)
+    plt.ylim(-m,m)
+    plt.xlabel('$EY_{SRF}$ (mV/m)')
+    plt.ylabel('$EZ_{SRF}$ (mV/m)')
+    t0 = epoch.CDFepoch.to_datetime(cdf['Epoch'][rec])
+    t0 = t0[0].strftime('%Y/%m/%d, %H:%M:%S.%f')
+    plt.title(('SolO TDS TSWF hodogram %s SWF#%d' % (t0, rec)))
+    plt.show()
+
+
+cdf=load_tswf(2021, 11, 15)
+plot_spectrum(cdf,0)
+plot_waveform(cdf,0)
+plot_hodogram(cdf,0)
