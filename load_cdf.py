@@ -108,69 +108,83 @@ def convert_to_SRF(data, index=0):
     E = np.dot(M, ww[0:2, :]) * 1e3  # transformation into SRF (Y-Z) in (mV/m)
     return E
 
+
+# Waveform plot
 def plot_waveform(cdf, rec=0):
     ww = convert_to_SRF(cdf, rec)
-    fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True, sharey=True)
     sr = cdf['SAMPLING_RATE'][rec]
     nsamp = cdf['SAMPS_PER_CH'][rec]
     t0 = epoch.CDFepoch.to_datetime(cdf['Epoch'][rec])
     t0 = t0[0].strftime('%Y/%m/%d, %H:%M:%S.%f')
-    tt = np.arange(0, nsamp/sr, 1/sr)*1e3
-    ax1.plot(tt,ww[0, :])
+    tt = np.arange(0, nsamp / sr, 1 / sr) * 1e3
+
+    fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True, sharey=True)
+    ax1.plot(tt, ww[0, :])
     ax1.set(ylabel='$EY_{SRF}$ (mV/m)')
-    plt.xlabel('Time since trigger (ms)')
-    ax2.plot(tt,ww[1, :])
+
+    ax2.plot(tt, ww[1, :])
     ax2.set(ylabel='$EZ_{SRF}$ (mV/m)')
     plt.xlabel('Time since trigger (ms)')
     plt.suptitle(('TDS-TSWF waveforms in SRF: %s SWF#%d' % (t0, rec)))
-    plt.xlim(0, nsamp/sr*1e3)
+    plt.xlim(0, nsamp / sr * 1e3)
     plt.show()
 
+
+# Spectrum
 def plot_spectrum(cdf, rec=0):
     nsamp = cdf['SAMPS_PER_CH'][rec]
     ww = convert_to_SRF(cdf, rec)
     sr = cdf['SAMPLING_RATE'][rec]
-    tt = np.arange(0, nsamp/sr, 1/sr)
+    tt = np.arange(0, nsamp / sr, 1 / sr)
     fourier_transform = np.fft.rfft(ww)
     abs_fourier_transform = np.abs(fourier_transform)
     power_spectrum = np.square(abs_fourier_transform)
-    frequency = np.linspace(0, sr / 2, len(power_spectrum[0,:]))
+    frequency = np.linspace(0, sr / 2, len(power_spectrum[0, :]))
     xmin = (np.abs(frequency - 200)).argmin()
-    xmax = (np.abs(frequency - min(sr/2, 200000))).argmin()
-    plt.plot(frequency[xmin:xmax]*1e-3, power_spectrum[0, xmin:xmax])
-    plt.plot(frequency[xmin:xmax]*1e-3, power_spectrum[1, xmin:xmax])
+    if sr > 300000:
+        fmax = 200000
+    else:
+        fmax = 100000
+    xmax = (np.abs(frequency - fmax)).argmin()
+
+    plt.plot(frequency[xmin:xmax] * 1e-3, power_spectrum[0, xmin:xmax])
+    plt.plot(frequency[xmin:xmax] * 1e-3, power_spectrum[1, xmin:xmax])
+    plt.legend(['$EY_{SRF}$', '$EZ_{SRF}$'])
+
     plt.yscale("log")
-    plt.xlim(2, min(sr / 2, 200))
+    plt.xlim(2, fmax * 1e-3)
     plt.xlabel('Frequency (kHz)')
     plt.ylabel('Power spectral density')
     t0 = epoch.CDFepoch.to_datetime(cdf['Epoch'][rec])
     t0 = t0[0].strftime('%Y/%m/%d, %H:%M:%S.%f')
     plt.title(('SolO TDS TSWF spectrum  %s SWF#%d' % (t0, rec)))
-    plt.show()
 
 
+# Hodogram
 def plot_hodogram(cdf, rec=0, size=200, samp=-1):
     ww = convert_to_SRF(cdf, rec)
     nsamp = cdf['SAMPS_PER_CH'][rec]
     if samp == -1:
         amp = np.abs(ww[0, :]) + np.abs(ww[1, :])
         samp = np.argmax(amp)
-        if samp<size/2:
+        if samp < size / 2:
             samp = 251
-        elif samp>nsamp-(size/2):
-            samp = nsamp-251
+        elif samp > nsamp - (size / 2):
+            samp = nsamp - 251
 
     if samp < size / 2:
         samp = size + 1
     elif samp > nsamp - (size / 2):
         samp = nsamp - size - 1
 
-    y = ww[0, samp-size:int(samp+size/2)]
-    z = ww[1, samp-size:int(samp+size/2)]
-    plt.plot(y,z)
-    m = ww.max()*1.1
-    plt.xlim(-m,m)
-    plt.ylim(-m,m)
+    y = ww[0, samp - size:int(samp + size / 2)]
+    z = ww[1, samp - size:int(samp + size / 2)]
+
+    plt.plot(y, z)
+    m = ww.max() * 1.1
+    plt.gca().set_aspect('equal')
+    plt.xlim(-m, m)
+    plt.ylim(-m, m)
     plt.xlabel('$EY_{SRF}$ (mV/m)')
     plt.ylabel('$EZ_{SRF}$ (mV/m)')
     t0 = epoch.CDFepoch.to_datetime(cdf['Epoch'][rec])
