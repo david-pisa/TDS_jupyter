@@ -135,8 +135,8 @@ def plot_spectrum(cdf, rec=0):
     abs_fourier_transform = np.abs(fourier_transform)
     power_spectrum = np.square(abs_fourier_transform)
     frequency = np.linspace(0, sr / 2, len(power_spectrum[0,:]))
-    xmin = find_nearest(frequency, 200)
-    xmax = find_nearest(frequency, min(sr/2, 200000))
+    xmin = (np.abs(frequency - 200)).argmin()
+    xmax = (np.abs(frequency - min(sr/2, 200000))).argmin()
     plt.plot(frequency[xmin:xmax]*1e-3, power_spectrum[0, xmin:xmax])
     plt.plot(frequency[xmin:xmax]*1e-3, power_spectrum[1, xmin:xmax])
     plt.yscale("log")
@@ -148,10 +148,6 @@ def plot_spectrum(cdf, rec=0):
     plt.title(('SolO TDS TSWF spectrum  %s SWF#%d' % (t0, rec)))
     plt.show()
 
-def find_nearest(array, value):
-    array = np.asarray(array)
-    idx = (np.abs(array - value)).argmin()
-    return idx
 
 def plot_hodogram(cdf, rec=0, size=200, samp=-1):
     ww = convert_to_SRF(cdf, rec)
@@ -182,8 +178,10 @@ def plot_hodogram(cdf, rec=0, size=200, samp=-1):
     plt.title(('SolO TDS TSWF hodogram %s SWF#%d' % (t0, rec)))
     plt.show()
 
-
-cdf=load_tswf(2021, 11, 15)
-plot_spectrum(cdf,0)
-plot_waveform(cdf,0)
-plot_hodogram(cdf,0)
+# Example:
+#
+# cdf=download_tswf('2021-11-15')
+# cdf=load_tswf(2021, 11, 15)
+# plot_spectrum(cdf,0)
+# plot_waveform(cdf,0)
+# plot_hodogram(cdf,0)
