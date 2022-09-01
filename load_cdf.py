@@ -104,8 +104,7 @@ def convert_to_SRF(data, index=0):
         Using the effective antenna directions
         two components of the E-field in the Y-Z SRF plane
         is calculated for the given TDS configuration.
-        data(ncomp, nsamples) - input array 2-D vectors of the electric field expressed in the
-                    ANT coordinate system in V/m
+        data(ncomp, nsamples) - loaded TDS cdf file containing data in the ANT coordiate system
         index - a snapshot number to be transformed, the first is default
         E(2,nsamples) - 2D E-field E[0, *] = Ey, E[1, *] = Ez
     """
@@ -138,6 +137,9 @@ def convert_to_SRF(data, index=0):
 def plot_waveform(ww, t0, sr):
     """
         Plotting the TDS-TSWF waveform snapshots
+        ww - electric field data in SRF coordinate system: 2D E-field E[0, *] = Ey, E[1, *] = Ez
+        t0 - time of snapshot: Epoch
+        sr - sampling rate
     """
     nsamp = int(ww.size / 2)
     timestr = t0.strftime('%Y/%m/%d, %H:%M:%S.%f')
@@ -159,6 +161,9 @@ def plot_waveform(ww, t0, sr):
 def plot_spectrum(ww, t0, sr):
     """
         Plotting the TDS-TSWF spectra computed from Ey and Ez SRF
+        ww - electric field data in SRF coordinate system: 2D E-field E[0, *] = Ey, E[1, *] = Ez
+        t0 - time of snapshot: Epoch
+        sr - sampling rate
     """
     figure(figsize=(8, 6), dpi=80)
     nsamp = int(ww.size / 2)
@@ -190,6 +195,10 @@ def plot_spectrum(ww, t0, sr):
 def plot_hodogram(ww, t0, size=200, samp=-1):
     """
         Plotting a hodogram from Ey-Ez component
+        ww - electric field data in SRF coordinate system: 2D E-field E[0, *] = Ey, E[1, *] = Ez
+        t0 - time of snapshot: Epoch
+        size - number of samples to be plotted
+        samp - the center index to specify which part of waveform will be plotted
     """
     figure(figsize=(8, 6), dpi=80)
     nsamp = int(ww.size / 2)
