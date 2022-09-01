@@ -1,2 +1,0 @@
-paste to cmd
-soar_download.py 2021-06-10 -d RPW-TDS-SURV-TSWF-E -o Download
