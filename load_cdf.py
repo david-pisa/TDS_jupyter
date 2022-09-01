@@ -4,7 +4,6 @@ import urllib.request
 import numpy as np
 import pandas
 import datetime
-# import wget
 import os
 import cdflib
 import cdflib.epochs as epoch
@@ -13,9 +12,20 @@ import os
 import matplotlib.pyplot as plt
 
 
-def load_tswf(year, month, day, opt=''):
+# Loading downloaded cdf files
+def load_tswf(date):
+    """
+        Loading TDS-SURV-TSWF-E CDF file
+        date - desired date as datetime.datetime(year, month, day) where
+            year - given year (>=2020)
+            month - given month (1-12)
+            day - give day (1-31)
+    """
     filetype = 'tswf'
 
+    year = date.year
+    month = date.month
+    day = date.day
     data_folder = os.path.join(os.getcwd(), 'Downloads')
     for names in os.listdir(os.path.join('Download', ('%04d' % year), ('%02d' % month))):
         if ('solo_L2_rpw-tds-surv-%s-e_%04d%02d%02d_V' % (filetype, year, month, day)) in names:
@@ -31,11 +41,14 @@ def load_tswf(year, month, day, opt=''):
     return data
 
 
-def download_tswf(date='2021-10-09', output_dir='Download'):
+# Download TDS-SURV-TSWF cdf file for a given date.
+# !! the file might have a size of several hundreds of MB
+def download_tswf(date=datetime.datetime(2021,10,9), output_dir='Download'):
     # Input args
-    # date          Date of CDF CDF files to download in format YYYY-MM-DD')
+    # date          Date of CDF CDF files to download as datetime.datetime() object
     # output_dir    Directory where resulting CDFs will be saved [{OUTPUT_DIR}].
 
+    date = date.strftime('%Y-%m-%d')
     descriptor = 'RPW-TDS-SURV-TSWF-E'
 
     try:
@@ -83,7 +96,19 @@ def download_tswf(date='2021-10-09', output_dir='Download'):
     #       wget.download('http://soar.esac.esa.int/soar-sl-tap/data?retrieval_type=PRODUCT&data_item_id=' + data_item_id + '&product_type=SCIENCE', out = outFilename)
 
 
+# Convering to SRF
 def convert_to_SRF(data, index=0):
+    """
+        Convert TDS SWF from the antenna to the spacecraft
+        reference frame (SRF).
+        Using the effective antenna directions
+        two components of the E-field in the Y-Z SRF plane
+        is calculated for the given TDS configuration.
+        data(ncomp, nsamples) - input array 2-D vectors of the electric field expressed in the
+                    ANT coordinate system in V/m
+        index - a snapshot number to be transformed, the first is default
+        E(2,nsamples) - 2D E-field E[0, *] = Ey, E[1, *] = Ez
+    """
     nsamp = data['SAMPS_PER_CH'][index]
     tds_mode = data['TDS_CONFIG_LABEL'][index]
     if 'SE1' in tds_mode:
@@ -111,6 +136,9 @@ def convert_to_SRF(data, index=0):
 
 # Waveform plot
 def plot_waveform(cdf, rec=0):
+    """
+        Plotting the TDS-TSWF waveform snapshots
+    """
     ww = convert_to_SRF(cdf, rec)
     sr = cdf['SAMPLING_RATE'][rec]
     nsamp = cdf['SAMPS_PER_CH'][rec]
@@ -118,7 +146,7 @@ def plot_waveform(cdf, rec=0):
     t0 = t0[0].strftime('%Y/%m/%d, %H:%M:%S.%f')
     tt = np.arange(0, nsamp / sr, 1 / sr) * 1e3
 
-    fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True, sharey=True)
+    fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True, sharey=True, figsize=(8, 6), dpi=80)
     ax1.plot(tt, ww[0, :])
     ax1.set(ylabel='$EY_{SRF}$ (mV/m)')
 
@@ -132,6 +160,10 @@ def plot_waveform(cdf, rec=0):
 
 # Spectrum
 def plot_spectrum(cdf, rec=0):
+    """
+        Plotting the TDS-TSWF spectra computed from Ey and Ez SRF
+    """
+    figure(figsize=(8, 6), dpi=80)
     nsamp = cdf['SAMPS_PER_CH'][rec]
     ww = convert_to_SRF(cdf, rec)
     sr = cdf['SAMPLING_RATE'][rec]
@@ -162,6 +194,10 @@ def plot_spectrum(cdf, rec=0):
 
 # Hodogram
 def plot_hodogram(cdf, rec=0, size=200, samp=-1):
+    """
+        Plotting a hodogram from Ey-Ez component
+    """
+    figure(figsize=(8, 6), dpi=80)
     ww = convert_to_SRF(cdf, rec)
     nsamp = cdf['SAMPS_PER_CH'][rec]
     if samp == -1:
@@ -192,10 +228,12 @@ def plot_hodogram(cdf, rec=0, size=200, samp=-1):
     plt.title(('SolO TDS TSWF hodogram %s SWF#%d' % (t0, rec)))
     plt.show()
 
+
 # Example:
 #
-# cdf=download_tswf('2021-11-15')
-# cdf=load_tswf(2021, 11, 15)
+# dt = datetime.datetime(2021,11,15)
+# cdf=download_tswf(dt)
+# cdf=load_tswf(dt)
 # plot_spectrum(cdf,0)
 # plot_waveform(cdf,0)
 # plot_hodogram(cdf,0)
