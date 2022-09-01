@@ -135,15 +135,12 @@ def convert_to_SRF(data, index=0):
 
 
 # Waveform plot
-def plot_waveform(cdf, rec=0):
+def plot_waveform(ww, t0, sr):
     """
         Plotting the TDS-TSWF waveform snapshots
     """
-    ww = convert_to_SRF(cdf, rec)
-    sr = cdf['SAMPLING_RATE'][rec]
-    nsamp = cdf['SAMPS_PER_CH'][rec]
-    t0 = epoch.CDFepoch.to_datetime(cdf['Epoch'][rec])
-    t0 = t0[0].strftime('%Y/%m/%d, %H:%M:%S.%f')
+    nsamp = int(ww.size / 2)
+    timestr = t0.strftime('%Y/%m/%d, %H:%M:%S.%f')
     tt = np.arange(0, nsamp / sr, 1 / sr) * 1e3
 
     fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True, sharey=True, figsize=(8, 6), dpi=80)
@@ -153,20 +150,18 @@ def plot_waveform(cdf, rec=0):
     ax2.plot(tt, ww[1, :])
     ax2.set(ylabel='$EZ_{SRF}$ (mV/m)')
     plt.xlabel('Time since trigger (ms)')
-    plt.suptitle(('TDS-TSWF waveforms in SRF: %s SWF#%d' % (t0, rec)))
+    plt.suptitle(('TDS-TSWF waveforms in SRF: %s SWF#%d' % (timestr, rec)))
     plt.xlim(0, nsamp / sr * 1e3)
     plt.show()
 
 
 # Spectrum
-def plot_spectrum(cdf, rec=0):
+def plot_spectrum(ww, t0, sr):
     """
         Plotting the TDS-TSWF spectra computed from Ey and Ez SRF
     """
     figure(figsize=(8, 6), dpi=80)
-    nsamp = cdf['SAMPS_PER_CH'][rec]
-    ww = convert_to_SRF(cdf, rec)
-    sr = cdf['SAMPLING_RATE'][rec]
+    nsamp = int(ww.size / 2)
     tt = np.arange(0, nsamp / sr, 1 / sr)
     fourier_transform = np.fft.rfft(ww)
     abs_fourier_transform = np.abs(fourier_transform)
@@ -187,19 +182,17 @@ def plot_spectrum(cdf, rec=0):
     plt.xlim(2, fmax * 1e-3)
     plt.xlabel('Frequency (kHz)')
     plt.ylabel('Power spectral density')
-    t0 = epoch.CDFepoch.to_datetime(cdf['Epoch'][rec])
-    t0 = t0[0].strftime('%Y/%m/%d, %H:%M:%S.%f')
-    plt.title(('SolO TDS TSWF spectrum  %s SWF#%d' % (t0, rec)))
+    timestr = t0.strftime('%Y/%m/%d, %H:%M:%S.%f')
+    plt.title(('SolO TDS TSWF spectrum  %s SWF#%d' % (timestr, rec)))
 
 
 # Hodogram
-def plot_hodogram(cdf, rec=0, size=200, samp=-1):
+def plot_hodogram(ww, t0, size=200, samp=-1):
     """
         Plotting a hodogram from Ey-Ez component
     """
     figure(figsize=(8, 6), dpi=80)
-    ww = convert_to_SRF(cdf, rec)
-    nsamp = cdf['SAMPS_PER_CH'][rec]
+    nsamp = int(ww.size / 2)
     if samp == -1:
         amp = np.abs(ww[0, :]) + np.abs(ww[1, :])
         samp = np.argmax(amp)
@@ -213,8 +206,8 @@ def plot_hodogram(cdf, rec=0, size=200, samp=-1):
     elif samp > nsamp - (size / 2):
         samp = nsamp - size - 1
 
-    y = ww[0, samp - size:int(samp + size / 2)]
-    z = ww[1, samp - size:int(samp + size / 2)]
+    y = ww[0, int(samp - size):int(samp + size / 2)]
+    z = ww[1, int(samp - size):int(samp + size / 2)]
 
     plt.plot(y, z)
     m = ww.max() * 1.1
@@ -223,9 +216,8 @@ def plot_hodogram(cdf, rec=0, size=200, samp=-1):
     plt.ylim(-m, m)
     plt.xlabel('$EY_{SRF}$ (mV/m)')
     plt.ylabel('$EZ_{SRF}$ (mV/m)')
-    t0 = epoch.CDFepoch.to_datetime(cdf['Epoch'][rec])
-    t0 = t0[0].strftime('%Y/%m/%d, %H:%M:%S.%f')
-    plt.title(('SolO TDS TSWF hodogram %s SWF#%d' % (t0, rec)))
+    timestr = t0.strftime('%Y/%m/%d, %H:%M:%S.%f')
+    plt.title(('SolO TDS TSWF hodogram %s SWF#%d' % (timestr, rec)))
     plt.show()
 
 
