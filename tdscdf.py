@@ -38,7 +38,7 @@ def load_data(time, tlen=None, product='surv-tswf'):
         if d == 0:
             dat = load_date(stime, ftime, product=product)
         else:
-            dat = load_date(np.int64(stime+(d * 86400e9)), ftime, product=product)
+            dat = load_date(np.int64(date+(d * 86400e9)), ftime, product=product)
         for dd in dat:
             if dd is None:
                 continue
@@ -46,11 +46,17 @@ def load_data(time, tlen=None, product='surv-tswf'):
                 for v in dd.keys():
                     data[v] = dd[v]
             else:
-                for v in dd.keys():
-                    if v == 'varinq':
-                        continue
-                    if data['varinq'][v].Rec_Vary:
-                        data[v] = np.concatenate((data[v], dd[v]))
+                if 'WAVEFORM_DATA' in dd.keys():
+                    data = _def_concatenate_swf(data, dd)
+                else:
+                    for v in dd.keys():
+                        if v == 'varinq':
+                            continue
+                        if data['varinq'][v].Rec_Vary:
+                            data[v] = np.concatenate((data[v], dd[v]))
+
+    if 'varinq' in data:
+        del data['varinq']                            
     return data                             
             
 def load_date(stime, ftime=None, product='surv-tswf'):
@@ -89,7 +95,11 @@ def load_date(stime, ftime=None, product='surv-tswf'):
     day = t0[2]
     if ftime is None:
         ftime = cdflib.epochs.CDFepoch.compute_tt2000((year, month, day, 23, 59, 59))
-    for names in os.listdir(os.path.join(solo_dir, f"{year:4d}/{month:02d}")):
+    idir = os.path.join(solo_dir, f"{year:4d}/{month:02d}")
+    if not os.path.isdir(idir):
+        print(f"No folder ({idir}) found! Exiting")
+        return dict()
+    for names in os.listdir(idir):
         if (names.find(f"solo_L2_rpw-tds-{product}-cdag_{year:4d}{month:02d}{day:02d}") != -1):
             fname.append(names)
             print('loading ' + names)
@@ -202,102 +212,59 @@ def convert_to_SRF(data, index=0):
     E = np.dot(M, ww[0:2, :]) * 1e3  # transformation into SRF (Y-Z) in (mV/m)
     return E
 
-
-# Waveform plot
-def plot_waveform(ww, t0, sr, rec):
-    """
-        Plotting the TDS-TSWF waveform snapshots
-    """
-    nsamp = len(ww[0, :])
-    ncomp = len(ww[:, 0])
-    timestr = t0.item().strftime('%Y/%m/%d, %H:%M:%S.%f')
-    tt = np.arange(0, nsamp / sr, 1 / sr) * 1e3
-
-    fig, ax = plt.subplots(nrows=ncomp, ncols=1, sharex=True, sharey=True, figsize=(8, 6), dpi=80)
-    if ncomp == 1:
-        ax.plot(tt, ww[0, :])
-        ax.set(ylabel='$EY_{SRF}$ (mV/m)')
+def _def_concatenate_swf(dat, dd):
+    ich = dd['CHANNEL_REF'][0,:]
+    #ich = ich[ich <= 40]
+    och = dat['CHANNEL_REF'][0,:]
+    #och = och[och <= 40]
+    # create list of merge channels
+    ch = np.concatenate((och, ich))
+    # create list of unique channels ignoring 255 (! check in TDS_CALBA! )
+    ch = np.unique(ch[ch <= 40])
+    if np.array_equal(ich, ch):
+        for v in dd.keys():
+            if v == 'varinq':
+                continue
+            if dat['varinq'][v].Rec_Vary:
+                dat[v] = np.concatenate((dat[v], dd[v]))
     else:
-        for c in np.arange(0, ncomp):
-            ax[c].plot(tt, ww[1, :])
-            ax[c].set(ylabel='$E{c+1}_{SRF}$ (mV/m)')
-    plt.xlabel('Time since trigger (ms)')
-    plt.suptitle(('TDS-TSWF waveforms in SRF: %s SWF#%d' % (timestr, rec)))
-    plt.xlim(0, nsamp / sr * 1e3)
-    plt.show()
-
-
-# Spectrum
-def plot_spectrum(ww, t0, sr, rec):
-    """
-        Plotting the TDS-TSWF spectra computed from Ey and Ez SRF
-    """
-    figure(figsize=(8, 6), dpi=80)
-    nsamp = int(ww.size / 2)
-    tt = np.arange(0, nsamp / sr, 1 / sr)
-    fourier_transform = np.fft.rfft(ww)
-    abs_fourier_transform = np.abs(fourier_transform)
-    power_spectrum = np.square(abs_fourier_transform)
-    frequency = np.linspace(0, sr / 2, len(power_spectrum[0, :]))
-    xmin = (np.abs(frequency - 200)).argmin()
-    if sr > 300000:
-        fmax = 200000
-    else:
-        fmax = 100000
-    xmax = (np.abs(frequency - fmax)).argmin()
-
-    plt.plot(frequency[xmin:xmax] * 1e-3, power_spectrum[0, xmin:xmax])
-    plt.plot(frequency[xmin:xmax] * 1e-3, power_spectrum[1, xmin:xmax])
-    plt.legend(['$EY_{SRF}$', '$EZ_{SRF}$'])
-
-    plt.yscale("log")
-    plt.xlim(2, fmax * 1e-3)
-    plt.xlabel('Frequency (kHz)')
-    plt.ylabel('Power spectral density')
-    timestr = t0.item().strftime('%Y/%m/%d, %H:%M:%S.%f')
-    plt.title(('SolO TDS TSWF spectrum  %s SWF#%d' % (timestr, rec)))
-
-
-# Hodogram
-def plot_hodogram(ww, t0, rec, size=200, samp=-1):
-    """
-        Plotting a hodogram from Ey-Ez component
-    """
-    figure(figsize=(8, 6), dpi=80)
-    nsamp = int(ww.size / 2)
-    if samp == -1:
-        amp = np.abs(ww[0, :]) + np.abs(ww[1, :])
-        samp = np.argmax(amp)
-        if samp < size / 2:
-            samp = 251
-        elif samp > nsamp - (size / 2):
-            samp = nsamp - 251
-
-    if samp < size / 2:
-        samp = size + 1
-    elif samp > nsamp - (size / 2):
-        samp = nsamp - size - 1
-
-    y = ww[0, int(samp - size):int(samp + size / 2)]
-    z = ww[1, int(samp - size):int(samp + size / 2)]
-
-    plt.plot(y, z)
-    m = ww.max() * 1.1
-    plt.gca().set_aspect('equal')
-    plt.xlim(-m, m)
-    plt.ylim(-m, m)
-    plt.xlabel('$EY_{SRF}$ (mV/m)')
-    plt.ylabel('$EZ_{SRF}$ (mV/m)')
-    timestr = t0.item().strftime('%Y/%m/%d, %H:%M:%S.%f')
-    plt.title(('SolO TDS TSWF hohogram %s SWF#%d' % (timestr, rec)))
-    plt.show()
-
-
-# Example:
-#
-# dt = datetime.datetime(2021,11,15)
-# cdf=download_tswf(dt)
-# cdf=load_tswf(dt)
-# plot_spectrum(cdf,0)
-# plot_waveform(cdf,0)
-# plot_hodogram(cdf,0)
+        for v in dd.keys():
+            if v == 'varinq':
+                continue
+            if dat['varinq'][v].Rec_Vary:
+                if (dat[v].ndim == 1) | (v == 'RPW_ANTENNA_RTN'):
+                    dat[v] = np.concatenate((dat[v], dd[v]))        
+                elif dat[v].ndim == 2:
+                    oshape = dat[v].shape
+                    ishape = dd[v].shape
+                    en_ch = np.where(ch <= 40)[0]
+                    temp = np.zeros((oshape[0] + ishape[0], len(ch)), dtype=dat[v].dtype)
+                    temp[0:oshape[0], 0:oshape[1]] = dat[v][:, en_ch]
+                    ch_ptr = len(en_ch)
+                    for c in ich:
+                        ind = np.where(och == c)[0]
+                        idx = np.where(ich == c)[0]
+                        if len(ind) == 1:
+                            temp[oshape[0]:oshape[0]+ishape[0], ind] = dd[v][:, idx]
+                        else:
+                            temp[oshape[0]:oshape[0]+ishape[0], ch_ptr] = dd[v][:, idx]
+                            ch_ptr += 1
+                    dat[v] = temp 
+                elif dat[v].ndim == 3:
+                    oshape = dat[v].shape
+                    ishape = dd[v].shape
+                    en_ch = np.where(ch <= 40)[0]
+                    max_samps = np.max((dat[v].shape[2], dd[v].shape[2]))
+                    temp = np.full((dat[v].shape[0] + dd[v].shape[0], len(ch), max_samps), -1e31)
+                    temp[0:oshape[0], 0:len(en_ch), 0:oshape[2]] = dat[v][:, en_ch, :]
+                    ch_ptr = oshape[1]
+                    for c in ich:
+                        ind = np.where(och == c)[0]
+                        idx = np.where(ich == c)[0]
+                        if len(ind) > 0:
+                            temp[oshape[0]:oshape[0]+ishape[0], ind, 0:ishape[2]] = dd[v][:, idx, :]
+                        else:
+                            temp[oshape[0]:oshape[0]+ishape[0], ch_ptr, 0:ishape[2]] = dd[v][:, idx, :]
+                            ch_ptr += 1
+                    dat[v] = temp                   
+    return dat
