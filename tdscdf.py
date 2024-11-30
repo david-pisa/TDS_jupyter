@@ -58,7 +58,7 @@ def load_data(time, tlen=None, product='surv-tswf'):
     if 'varinq' in data:
         del data['varinq']                            
     return data                             
-            
+
 def load_date(stime, ftime=None, product='surv-tswf'):
     """
         Loading TDS CDF file
@@ -96,34 +96,42 @@ def load_date(stime, ftime=None, product='surv-tswf'):
     if ftime is None:
         ftime = cdflib.epochs.CDFepoch.compute_tt2000((year, month, day, 23, 59, 59))
     idir = os.path.join(solo_dir, f"{year:4d}/{month:02d}")
-    if not os.path.isdir(idir):
-        print(f"No folder ({idir}) found! Exiting")
-        return dict()
-    for names in os.listdir(idir):
-        if (names.find(f"solo_L2_rpw-tds-{product}-cdag_{year:4d}{month:02d}{day:02d}") != -1):
-            fname.append(names)
-            print('loading ' + names)
-    datas = list()
+    if os.path.isdir(idir):
+       # print(f"No folder ({idir}) found! Exiting")
+        #return dict()
+        for names in os.listdir(idir):
+            if (names.find(f"solo_L2_rpw-tds-{product}-cdag_{year:4d}{month:02d}{day:02d}") != -1):
+                fname.append(f"{year:4d}/{month:02d}/{names}")
+                print('loading ' + names)
     if not fname:
-        print(f"No local file(s) found for {year:4d}/{month:02d}/{day:02d}")
+        print(f"No local file(s) found for {year:4d}/{month:02d}")
         print(f"Downloading...")
         fname = download_data(t0[0:3], product)
-
-        
+        solo_dir = ''
+    
+    datas = list()    
     for f in fname:
-        cdf = cdflib.CDF(os.path.join(solo_dir, f"{year:4d}/{month:02d}", f))
+        cdf = cdflib.CDF(os.path.join(solo_dir, f))
         data = {}
         info = cdf.cdf_info()
         varnames = info.zVariables
         if len(varnames)>0:
             data['varinq'] = dict()
         for varname in varnames:
-            data[varname] = cdf.varget(varname, epoch='Epoch', starttime=np.int64(stime), endtime=np.int64(ftime))
+            try:
+                data[varname] = cdf.varget(varname, epoch='Epoch', starttime=np.int64(stime), endtime=np.int64(ftime))
+            except:
+                #data[varname] = -1
+                print(f'Empty var: {varname} for {f}')
+                continue
             data['varinq'][varname] = cdf.varinq(varname)
         datas.append(data)
     return datas
 
 
+import sunpy_soar
+from sunpy.net import Fido
+import sunpy.net.attrs as a
 # Download TDS-SURV-TSWF cdf file for a given date.
 # !! the file might have a size of several hundreds of MB
 def download_data(date, product, output_dir='./Download'):
@@ -145,9 +153,21 @@ def download_data(date, product, output_dir='./Download'):
         descriptor += '-E'
         
     output_dir = os.path.join(output_dir, ('%04d' % y), ('%02d' % m))
-    descriptor = descriptor.upper()
     if not os.path.isdir(output_dir):
         os.makedirs(output_dir)
+    # Create search attributes
+    instrument = a.Instrument('RPW')
+    time = a.Time(f'{y}-{m:02d}-{d:02d}', f'{y}-{m:02d}-{d:02d}')
+    level = a.Level(2)
+    product = a.soar.Product(descriptor)
+    # Do search
+    result = Fido.search(instrument & time & level & product)
+    
+    # Download files
+    files = Fido.fetch(result, path=output_dir)
+    '''
+    descriptor = descriptor.upper()
+    
     
     # Looking for metadata
     instru = descriptor[0:3]
@@ -173,7 +193,8 @@ def download_data(date, product, output_dir='./Download'):
             os.system(cmd)
             print('download complete')
         fpath.append(oFile)
-    return fpath
+    '''    
+    return files
 
 # Convering to SRF
 def convert_to_SRF(data, index=0):
