@@ -101,7 +101,7 @@ def plot_hodogram(ww, t0, rec, size=200, samp=-1):
     plt.show()
 
 
-def tds_calculate_swf_spectrogram(swf, stime=None, ftime=None, frqmin=None, frqmax=None, channel=None, return_spectra=False):
+def tds_calculate_swf_spectrogram(swf, stime=None, ftime=None, frqmin=None, frqmax=None, channel=None, fftlen=1024, return_spectra=False):
     ep = swf['Epoch']
     if stime is None:
         t0 = 0
@@ -133,7 +133,7 @@ def tds_calculate_swf_spectrogram(swf, stime=None, ftime=None, frqmin=None, frqm
     """
         SETTINGS
     """
-    fftlen = 4096 # FFT Length 
+    #fftlen = 4096 # FFT Length 
     if frqmin is None:
         freqmin = 0. # Minimal frequency; if <=0 then the first set
     else:
@@ -164,14 +164,14 @@ def tds_calculate_swf_spectrogram(swf, stime=None, ftime=None, frqmin=None, frqm
 
     nfreq = int(fftlen / 2)
 
-    Pwx = np.zeros((nrec, nfreq))
+    Pwx = np.zeros((nrec, nfreq + 1))
     Freq = np.full((nfreq + 1), float('nan'))
    
 
     for rc in rc_range:
         freq, sp = signal.welch(ww[rc, :, :], swf['SAMPLING_RATE'][rc], window='hann', nperseg=fftlen, 
                                        noverlap=fftlen//2 )    
-        Pwx[rc-rc_min, :] = sp[ch, 1:]
+        Pwx[rc-rc_min, :] = sp[ch, :]
     find = (np.asarray((freq > freqmin) & (freq < freqmax)).nonzero())[0]
     Freq = freq[find]
     Pwx = Pwx[:, find]
@@ -249,13 +249,13 @@ def tds_plot_swf_spectrogram(x, y, data, ax=None, freqmin=None, freqmax=None,vmi
     ax.tick_params(labelsize=12)
     # ax.plot([ep[0], ep[-1]], [5e3, 5e3], '--', color='magenta')
     c1 = plt.colorbar(im1, ax=ax, pad=0.01)
-    c1.set_label('$\mathrm{V^2m^{-2}Hz^{-1}}$', fontsize=12)
+    c1.set_label('$\mathrm{V^2m^{-2}Hz^{-1}}$', fontsize=14)
     return ax
 
 def tds_plot_mamp(ax, mamp, channel=0):
     mamp['WAVEFORM_DATA'][np.asarray(mamp['WAVEFORM_DATA'] < 0).nonzero()] = float('nan')
     ep = cdflib.cdfepoch.to_datetime(mamp['Epoch'])    
-    sdate = (ep[0].astype(datetime.datetime)).strftime('%Y/%m/%d')
+    sdate = (ep[0].astype(datetime.datetime))#.strftime('%Y/%m/%d')
     complabel = f"V{int(mamp['CHANNEL_REF'][0][channel]/10)}-V{np.mod(mamp['CHANNEL_REF'][0][channel],10)}"
     mamp['WAVEFORM_DATA'][np.asarray(mamp['WAVEFORM_DATA'] < 0).nonzero()] = float('nan')
     ax.semilogy(ep, mamp['WAVEFORM_DATA'][:,channel], label='full rate')
