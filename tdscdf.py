@@ -29,7 +29,9 @@ def load_data(time, tlen=None, product='surv-tswf'):
         ftime = date + np.int64(86400e9)
     else:
         ftime = stime + np.int64(tlen * 1e9)
-    
+    if ftime > date + np.int64(86400e9):
+        print('Loading multiple files is not supported yet.')                       
+        ftime = date + np.int64(86400e9)
     delta_days = np.ceil((ftime - date) / 86400e9)
     if delta_days == 0:
         delta_days = 1
@@ -106,8 +108,8 @@ def load_date(stime, ftime=None, product='surv-tswf'):
     if not fname:
         print(f"No local file(s) found for {year:4d}/{month:02d}")
         print(f"Downloading...")
-        fname = download_data(t0[0:3], product)
-        solo_dir = ''
+        fname = download_data(t0[0:3], f'rpw-tds-{product}')
+        solo_dir = './'
     
     datas = list()    
     for f in fname:
@@ -129,72 +131,113 @@ def load_date(stime, ftime=None, product='surv-tswf'):
     return datas
 
 
-import sunpy_soar
-from sunpy.net import Fido
-import sunpy.net.attrs as a
 # Download TDS-SURV-TSWF cdf file for a given date.
 # !! the file might have a size of several hundreds of MB
-def download_data(date, product, output_dir='./Download'):
-    # Input args
-    # date          Date of CDF CDF files to download as datetime.datetime() object
-    # output_dir    Directory where resulting CDFs will be saved [{OUTPUT_DIR}].
+import os
+import datetime
+import urllib.request
+import urllib.parse
+import pandas as pd
+import requests
 
+def download_data(date, descriptor, output_dir='./Download'):
+    """
+    Download ESA SOAR CDF data files for a given date and descriptor.
+
+    Args:
+        date (datetime.datetime): Date of data to download.
+        descriptor (str): Instrument data product descriptor (e.g. 'RPW_L2_XYZ').
+        output_dir (str): Directory where resulting CDFs will be saved.
+
+    Returns:
+        list of str: Paths to downloaded files.
+    """
     y = date[0]
     m = date[1]
     d = date[2]
-    descriptor = f'RPW-TDS-{product.upper()}'
-    if product == 'surv-tswf':
-        descriptor += '-E'
-    elif product == 'surv-rswf':
-        descriptor += '-E'
-    elif product == 'sbm1-rswf':    
-        descriptor += '-E'
-    elif product == 'sbm2-tswf':
-        descriptor += '-E'
-        
-    output_dir = os.path.join(output_dir, ('%04d' % y), ('%02d' % m))
+
+    output_dir = os.path.join(output_dir, f"{y:04d}", f"{m:02d}")
     if not os.path.isdir(output_dir):
         os.makedirs(output_dir)
-    # Create search attributes
-    instrument = a.Instrument('RPW')
-    time = a.Time(f'{y}-{m:02d}-{d:02d}', f'{y}-{m:02d}-{d:02d}')
-    level = a.Level(2)
-    product = a.soar.Product(descriptor)
-    # Do search
-    result = Fido.search(instrument & time & level & product)
-    
-    # Download files
-    files = Fido.fetch(result, path=output_dir)
-    '''
+
     descriptor = descriptor.upper()
+    instru = descriptor[0:3]  # Assuming first 3 chars are instrument code
     
-    
-    # Looking for metadata
-    instru = descriptor[0:3]
-    date0 = datetime.datetime(y, m, d, 0, 0, 0, 0)
+    # Construct date range for query (one full day)
+    date0 = datetime.datetime(y, m, d)
     date1 = date0 + datetime.timedelta(days=1)
     sdate = date0.strftime('%Y-%m-%d')
     sdate1 = date1.strftime('%Y-%m-%d')
-    link = f"http://soar.esac.esa.int/soar-sl-tap/tap/sync?REQUEST=doQuery&LANG=ADQL&FORMAT=csv&QUERY=SELECT+data_item_id,descriptor,level+FROM+v_sc_data_item+WHERE+begin_time%3E=%27{sdate}%27+AND+begin_time%3C%27{sdate1}%27+AND+file_format=%27CDF%27+AND+level=%27L2%27+AND+instrument=%27RPW%27+AND+descriptor=%27{descriptor.lower()}%27+ORDER+BY+begin_time+ASC"
-    f = urllib.request.urlopen(link)
-    myfile = pandas.read_csv(f)
-    # Saving data_item_id to list
-    fnames = myfile.data_item_id.tolist()
-    # Dowloading with wget
-    progress = 1
-    fpath = list()
-    for fn in enumerate(fnames):
-        ind, data_item_id = fn
-        print(f"{data_item_id} item {ind+1} /  {len(fnames)} \n")
-        url = f'http://soar.esac.esa.int/soar-sl-tap/data?retrieval_type=LAST_PRODUCT&data_item_id={data_item_id}&product_type=SCIENCE'
-        cmd = f'wget -q -nc -P {output_dir} --content-disposition "{url}"'
-        oFile = os.path.join(output_dir, data_item_id + '.cdf')
+
+    # Construct query URL with descriptor and instrument dynamically included
+    url = (
+        f"http://soar.esac.esa.int/soar-sl-tap/tap/sync?"
+        f"REQUEST=doQuery&LANG=ADQL&FORMAT=csv&QUERY="
+    )
+    query = (
+        f"SELECT data_item_id,descriptor,level,filename FROM v_sc_data_item "
+        f"WHERE begin_time>='{sdate}' AND begin_time<'{sdate1}' "
+        f"AND file_format='CDF' AND level='L2' AND instrument='{instru}' "
+        f"AND descriptor='{descriptor.lower()}' ORDER BY begin_time ASC"
+    )
+    url = url + urllib.parse.quote(query)
+    # Retrieve metadata CSV from SOAR TAP service
+    try:
+        with urllib.request.urlopen(url) as f:
+            myfile = pd.read_csv(f)
+
+        fnames = myfile.filename.tolist()
+        data_items = myfile.data_item_id.tolist()
+    except:
+        print("Download troubles...")
+        return []
+    
+    fpath = []
+    for ind, data_item_id in enumerate(data_items):
+        print(f"Downloading item {ind+1} of {len(fnames)}: {fnames[ind]}")
+        download_url = (
+            f"http://soar.esac.esa.int/soar-sl-tap/data?"
+            f"retrieval_type=LAST_PRODUCT&data_item_id={data_item_id}&product_type=SCIENCE"
+        )
+        oFile = os.path.join(output_dir, fnames[ind])
+    
         if not os.path.isfile(oFile):
-            os.system(cmd)
-            print('download complete')
+            try:
+                with requests.get(download_url, stream=True) as r:
+                    r.raise_for_status()
+                    with open(oFile, 'wb') as f_out:
+                        for chunk in r.iter_content(chunk_size=8192):
+                            f_out.write(chunk)
+                print('Download complete')
+            except Exception as e:
+                print(f"Failed to download {fnames[ind]}: {e}")
+                continue
+        else:
+            print('File already exists, skipping download')
+
         fpath.append(oFile)
-    '''    
-    return files
+    '''
+    for ind, data_item_id in enumerate(data_items):
+        print(f"Downloading item {ind+1} of {len(fnames)}: {fnames[ind]}")
+        url = (
+            f"http://soar.esac.esa.int/soar-sl-tap/data?"
+            f"retrieval_type=LAST_PRODUCT&data_item_id={data_item_id}&product_type=SCIENCE"
+        )
+        oFile = os.path.join(output_dir, fnames[ind])
+
+        if not os.path.isfile(oFile):
+            # Use wget command to download the file quietly, without overwriting existing file
+            cmd = f'wget -nc -P {output_dir}/ --content-disposition -O {fnames[ind]} {url}'
+            print(os.getcwd(),cmd)
+            os.system(cmd)
+            print('Download complete')
+        else:
+            print('File already exists, skipping download')
+        '''
+    
+        #fpath.append(oFile)
+
+    return fpath
 
 # Convering to SRF
 def convert_to_SRF(data, index=0):
